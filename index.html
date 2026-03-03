@@ -83,6 +83,25 @@
           </div>
         </details>
 
+        <details class="panel">
+          <summary>Effect keyframes</summary>
+          <div class="panel-body">
+            <label>Keyframe time (s)
+              <input id="keyframeTime" type="number" min="0" step="0.01" value="0" />
+            </label>
+            <label>Keyframes
+              <select id="keyframeList" size="5" aria-label="Effect keyframes"></select>
+            </label>
+            <div class="actions">
+              <button id="addKeyframeBtn" type="button">Add keyframe from current sliders</button>
+              <button id="updateKeyframeBtn" type="button" disabled>Update selected keyframe</button>
+              <button id="deleteKeyframeBtn" type="button" disabled>Delete selected keyframe</button>
+              <button id="clearKeyframesBtn" type="button" disabled>Clear all keyframes</button>
+            </div>
+            <p class="export-note">Keyframes are linearly interpolated over the export duration. Add multiple points to ramp effects up and down.</p>
+          </div>
+        </details>
+
         <details class="panel" open>
           <summary>Export</summary>
           <div class="panel-body">
