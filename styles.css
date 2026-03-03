@@ -212,3 +212,19 @@ progress {
   font-size: 0.76rem;
   color: #aaaaaa;
 }
+
+
+#keyframeList {
+  width: 100%;
+  min-height: 8rem;
+  background: #1f1f1f;
+  color: #efefef;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  padding: 0.25rem;
+  font-size: 0.74rem;
+}
+
+#keyframeList option {
+  padding: 0.2rem 0.25rem;
+}

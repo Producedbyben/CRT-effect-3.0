@@ -379,7 +379,7 @@ function getTargetBitrate(width, height, fps) {
   return Math.max(5_000_000, Math.min(35_000_000, estimated));
 }
 
-async function exportMp4({ canvas, renderer, params, fps, duration, beforeRenderFrame, onProgress, signal, bitrateScale = 1 }) {
+async function exportMp4({ canvas, renderer, params, paramsResolver, fps, duration, beforeRenderFrame, onProgress, signal, bitrateScale = 1 }) {
   if (!("VideoEncoder" in window)) {
     throw new Error("WebCodecs VideoEncoder is unavailable in this browser/context.");
   }
@@ -444,7 +444,8 @@ async function exportMp4({ canvas, renderer, params, fps, duration, beforeRender
 
     const t = frame / fps;
     if (beforeRenderFrame) await beforeRenderFrame(t, frame, fps);
-    renderer.render(ctx, width, height, t, params, frame, fps);
+    const frameParams = paramsResolver ? paramsResolver(t, duration) : params;
+    renderer.render(ctx, width, height, t, frameParams, frame, fps);
 
     const videoFrame = new VideoFrame(canvas, {
       timestamp: Math.round((frame * 1_000_000) / fps),
@@ -483,7 +484,7 @@ function getSupportedWebmMimeType(withAudio) {
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "video/webm";
 }
 
-async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loadedSourceType, loadedVideo, loadedImage, sourceScale, onProgress, signal, includeAudio }) {
+async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fps, duration, loadedSourceType, loadedVideo, loadedImage, sourceScale, onProgress, signal, includeAudio }) {
   const width = canvas.width;
   const height = canvas.height;
   const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
@@ -542,7 +543,8 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
       renderer.setImage(loadedImage, sourceScale());
     }
 
-    renderer.render(ctx, width, height, t, params, frame, fps);
+    const frameParams = paramsResolver ? paramsResolver(t, duration) : params;
+    renderer.render(ctx, width, height, t, frameParams, frame, fps);
     onProgress?.((frame + 1) / totalFrames, frame + 1, totalFrames);
 
     const nextFrameAt = start + ((frame + 1) * 1000) / fps;
@@ -576,6 +578,12 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
   const resetSourceBtn = document.getElementById("resetSourceBtn");
   const imageInput = document.getElementById("imageInput");
   const presetSelect = document.getElementById("presetSelect");
+  const keyframeTimeInput = document.getElementById("keyframeTime");
+  const keyframeList = document.getElementById("keyframeList");
+  const addKeyframeBtn = document.getElementById("addKeyframeBtn");
+  const updateKeyframeBtn = document.getElementById("updateKeyframeBtn");
+  const deleteKeyframeBtn = document.getElementById("deleteKeyframeBtn");
+  const clearKeyframesBtn = document.getElementById("clearKeyframesBtn");
 
   const controlIds = [
     "scanlineStrength",
@@ -613,6 +621,8 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
   let activeExportController = null;
   let isExporting = false;
   let previewDirty = true;
+  let effectKeyframes = [];
+  let selectedKeyframeTime = null;
 
   function setupRangeWithNumber(id) {
     const slider = document.getElementById(id);
@@ -727,6 +737,16 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
     document.getElementById("fps").disabled = isExporting;
     document.getElementById("duration").disabled = isExporting;
     document.getElementById("exportQuality").disabled = isExporting;
+    keyframeTimeInput.disabled = isExporting;
+    keyframeList.disabled = isExporting;
+    addKeyframeBtn.disabled = isExporting;
+    if (isExporting) {
+      updateKeyframeBtn.disabled = true;
+      deleteKeyframeBtn.disabled = true;
+      clearKeyframesBtn.disabled = true;
+    } else {
+      updateKeyframeActionState();
+    }
     exportFormatControl?.setDisabled(isExporting);
     updateExportControlsState();
   }
@@ -897,6 +917,107 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
 
   function readParams() {
     return Object.fromEntries(controlIds.map((id) => [id, Number(document.getElementById(id).value)]));
+  }
+
+  function getExportDurationSeconds() {
+    return Math.max(0.5, Number(document.getElementById("duration").value) || 4);
+  }
+
+  function clampKeyframeTime(time) {
+    return Math.max(0, Math.min(Number(time) || 0, getExportDurationSeconds()));
+  }
+
+  function updateKeyframeActionState() {
+    const hasSelection = selectedKeyframeTime !== null
+      && effectKeyframes.some((entry) => Math.abs(entry.time - selectedKeyframeTime) < 0.0005);
+    updateKeyframeBtn.disabled = !hasSelection;
+    deleteKeyframeBtn.disabled = !hasSelection;
+    clearKeyframesBtn.disabled = effectKeyframes.length === 0;
+  }
+
+  function renderKeyframeList() {
+    keyframeList.innerHTML = "";
+    for (const keyframe of effectKeyframes) {
+      const opt = document.createElement("option");
+      const summary = presetSchemaKeys
+        .map((id) => `${id}: ${Number(keyframe.params[id] || 0).toFixed(id === "pixelSize" ? 0 : 2)}`)
+        .join(" · ");
+      opt.value = String(keyframe.time);
+      opt.textContent = `${keyframe.time.toFixed(2)}s — ${summary}`;
+      if (selectedKeyframeTime !== null && Math.abs(keyframe.time - selectedKeyframeTime) < 0.0005) {
+        opt.selected = true;
+      }
+      keyframeList.appendChild(opt);
+    }
+    if (keyframeList.selectedIndex === -1 && keyframeList.options.length > 0) {
+      keyframeList.selectedIndex = 0;
+      selectedKeyframeTime = Number(keyframeList.value);
+    }
+    updateKeyframeActionState();
+  }
+
+  function upsertKeyframe(timeSeconds, params) {
+    const time = clampKeyframeTime(timeSeconds);
+    const existingIndex = effectKeyframes.findIndex((entry) => Math.abs(entry.time - time) < 0.0005);
+    const nextEntry = {
+      time,
+      params: { ...params },
+    };
+
+    if (existingIndex >= 0) {
+      effectKeyframes[existingIndex] = nextEntry;
+    } else {
+      effectKeyframes.push(nextEntry);
+    }
+
+    effectKeyframes.sort((a, b) => a.time - b.time);
+    selectedKeyframeTime = time;
+    keyframeTimeInput.value = time.toFixed(2);
+    renderKeyframeList();
+    markPreviewDirty();
+  }
+
+  function removeSelectedKeyframe() {
+    if (selectedKeyframeTime === null) return;
+    effectKeyframes = effectKeyframes.filter((entry) => Math.abs(entry.time - selectedKeyframeTime) >= 0.0005);
+    selectedKeyframeTime = effectKeyframes.length > 0 ? effectKeyframes[0].time : null;
+    renderKeyframeList();
+    markPreviewDirty();
+  }
+
+  function getAnimatedParamsAtTime(timeSeconds, durationSeconds, fallbackParams, { holdEdgeValues = true } = {}) {
+    const baseParams = fallbackParams || readParams();
+    if (!effectKeyframes.length) {
+      return baseParams;
+    }
+
+    const maxTime = Math.max(0.0001, durationSeconds || getExportDurationSeconds());
+    const t = Math.max(0, Math.min(timeSeconds, maxTime));
+
+    const first = effectKeyframes[0];
+    const last = effectKeyframes[effectKeyframes.length - 1];
+
+    if (t <= first.time) return holdEdgeValues ? { ...first.params } : { ...baseParams };
+    if (t >= last.time) return holdEdgeValues ? { ...last.params } : { ...baseParams };
+
+    for (let i = 0; i < effectKeyframes.length - 1; i++) {
+      const left = effectKeyframes[i];
+      const right = effectKeyframes[i + 1];
+      if (t >= left.time && t <= right.time) {
+        const span = Math.max(0.000001, right.time - left.time);
+        const alpha = (t - left.time) / span;
+        const blended = {};
+        for (const id of controlIds) {
+          const a = Number(left.params[id] ?? baseParams[id] ?? 0);
+          const b = Number(right.params[id] ?? baseParams[id] ?? 0);
+          const value = a + (b - a) * alpha;
+          blended[id] = id === "pixelSize" ? Math.max(1, Math.round(value)) : value;
+        }
+        return blended;
+      }
+    }
+
+    return { ...baseParams };
   }
 
   function applyPreset(name) {
@@ -1071,12 +1192,20 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
     if (shouldRender) {
       const { width: previewWidth, height: previewHeight } = getPreviewRenderSize();
       if (previewWidth === canvas.width && previewHeight === canvas.height) {
-        renderer.render(ctx, canvas.width, canvas.height, frame / fps, readParams(), frame, fps);
+        const previewSeconds = loadedSourceType === "video" && loadedVideo?.video && !stillMode
+          ? previewFrameSeconds
+          : frame / fps;
+        const animatedParams = getAnimatedParamsAtTime(previewSeconds, getExportDurationSeconds(), readParams(), { holdEdgeValues: false });
+        renderer.render(ctx, canvas.width, canvas.height, frame / fps, animatedParams, frame, fps);
       } else {
         previewBuffer.width = previewWidth;
         previewBuffer.height = previewHeight;
         const previewCtx = previewBuffer.getContext("2d", { alpha: false, desynchronized: true });
-        renderer.render(previewCtx, previewBuffer.width, previewBuffer.height, frame / fps, readParams(), frame, fps);
+        const previewSeconds = loadedSourceType === "video" && loadedVideo?.video && !stillMode
+          ? previewFrameSeconds
+          : frame / fps;
+        const animatedParams = getAnimatedParamsAtTime(previewSeconds, getExportDurationSeconds(), readParams(), { holdEdgeValues: false });
+        renderer.render(previewCtx, previewBuffer.width, previewBuffer.height, frame / fps, animatedParams, frame, fps);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "black";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1159,6 +1288,49 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
     progressEl.value = 0;
   });
 
+  keyframeTimeInput.addEventListener("input", () => {
+    keyframeTimeInput.value = String(clampKeyframeTime(keyframeTimeInput.value));
+  });
+
+  keyframeList.addEventListener("change", () => {
+    const value = Number(keyframeList.value);
+    selectedKeyframeTime = Number.isFinite(value) ? value : null;
+    if (selectedKeyframeTime !== null) {
+      keyframeTimeInput.value = selectedKeyframeTime.toFixed(2);
+    }
+    updateKeyframeActionState();
+  });
+
+  addKeyframeBtn.addEventListener("click", () => {
+    upsertKeyframe(keyframeTimeInput.value, readParams());
+    setStatus("Keyframe added.", "success");
+    progressEl.value = 0;
+  });
+
+  updateKeyframeBtn.addEventListener("click", () => {
+    if (selectedKeyframeTime === null) return;
+    const oldTime = selectedKeyframeTime;
+    effectKeyframes = effectKeyframes.filter((entry) => Math.abs(entry.time - oldTime) >= 0.0005);
+    upsertKeyframe(keyframeTimeInput.value, readParams());
+    setStatus("Keyframe updated from current sliders.", "success");
+    progressEl.value = 0;
+  });
+
+  deleteKeyframeBtn.addEventListener("click", () => {
+    removeSelectedKeyframe();
+    setStatus("Keyframe removed.", "info");
+    progressEl.value = 0;
+  });
+
+  clearKeyframesBtn.addEventListener("click", () => {
+    effectKeyframes = [];
+    selectedKeyframeTime = null;
+    renderKeyframeList();
+    markPreviewDirty();
+    setStatus("All keyframes cleared.", "info");
+    progressEl.value = 0;
+  });
+
   exportBtn.addEventListener("click", async () => {
     if (!hasLoadedSource) {
       setStatus("Load an image or video before exporting.", "warn");
@@ -1187,6 +1359,7 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
           canvas,
           renderer,
           params: readParams(),
+          paramsResolver: (timeSeconds, durationSeconds) => getAnimatedParamsAtTime(timeSeconds, durationSeconds, readParams(), { holdEdgeValues: true }),
           fps,
           duration,
           loadedSourceType,
@@ -1205,6 +1378,7 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
           canvas,
           renderer,
           params: readParams(),
+          paramsResolver: (timeSeconds, durationSeconds) => getAnimatedParamsAtTime(timeSeconds, durationSeconds, readParams(), { holdEdgeValues: true }),
           fps,
           duration,
           beforeRenderFrame: loadedSourceType === "video" && loadedVideo
@@ -1313,6 +1487,7 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
   updatePreviewControlsState();
   updateExportControlsState();
   syncPreviewTimeControl();
+  renderKeyframeList();
   window.addEventListener("beforeunload", () => {
     if (loadedVideo?.objectUrl) {
       URL.revokeObjectURL(loadedVideo.objectUrl);
