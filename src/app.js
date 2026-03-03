@@ -563,7 +563,7 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
   downloadBlob(blob, `crt-export-${Date.now()}.webm`);
 }
 
-(function boot() {
+(async function boot() {
   const renderer = new CRTRenderer();
   const canvas = document.getElementById("previewCanvas");
   const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
@@ -592,7 +592,18 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
   let loadedSourceType = "image";
   let loadedVideo = null;
   let loadedImage = null;
-  const presets = { ...FALLBACK_PRESETS };
+  const presetSchemaKeys = [
+    "scanlineStrength",
+    "phosphorMask",
+    "barrelDistortion",
+    "bloom",
+    "flicker",
+    "chromaticAberration",
+    "noise",
+    "pixelSize",
+  ];
+
+  let presets = { ...FALLBACK_PRESETS };
   let start = performance.now();
   let previewFrameSeconds = 0;
   let previewTargetSeconds = 0;
@@ -897,6 +908,33 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
         slider.value = values[id];
         slider.__syncRangeNumber?.();
       }
+    }
+  }
+
+  function isValidPresetValues(values) {
+    if (!values || typeof values !== "object") return false;
+    return presetSchemaKeys.every((key) => typeof values[key] === "number");
+  }
+
+  async function loadPresets() {
+    try {
+      const module = await import("./presets.js");
+      if (module?.PRESETS && Object.keys(module.PRESETS).length > 0) {
+        const entries = Object.entries(module.PRESETS);
+        const hasInvalidPreset = entries.some(([, values]) => !isValidPresetValues(values));
+        if (hasInvalidPreset) {
+          setStatus("Preset file loaded with invalid schema. Using built-in presets.", "warn");
+          return;
+        }
+
+        presets = { ...presets, ...module.PRESETS };
+        setStatus("Presets loaded successfully.", "success");
+        return;
+      }
+      setStatus("Preset file loaded but empty. Using built-in presets.", "warn");
+    } catch (error) {
+      setStatus("Could not load presets.js. Using built-in presets.", "warn");
+      console.warn("Preset loading failed", error);
     }
   }
 
@@ -1269,6 +1307,7 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
   });
 
   setExportAvailability();
+  await loadPresets();
   initializePresets();
   defaultParamValues = readParams();
   updatePreviewControlsState();
@@ -1283,7 +1322,8 @@ async function exportWebmRealtime({ canvas, renderer, params, fps, duration, loa
     }
   });
 
-
-  setStatus("Load an image or video (MP4/WebM/MOV/etc.) to begin.", "info");
+  if (statusEl.dataset.mode !== "warn") {
+    setStatus("Load an image or video (MP4/WebM/MOV/etc.) to begin.", "info");
+  }
   requestAnimationFrame(animate);
 })();
