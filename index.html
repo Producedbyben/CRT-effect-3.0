@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CRT Effect Renderer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="controls">
+        <h1>CRT Effect Renderer</h1>
+
+        <details class="panel" open>
+          <summary>Source & presets</summary>
+          <div class="panel-body">
+            <label class="file-input">
+              <span>Image / Video source</span>
+              <input id="imageInput" type="file" accept="image/*,video/*,.mov,.webm,.mp4" />
+            </label>
+
+            <label>Preset
+              <div id="presetSelect" class="selection-box selection-box-wrap" role="radiogroup" aria-label="Preset"></div>
+            </label>
+          </div>
+        </details>
+
+        <details class="panel" open>
+          <summary>CRT effect</summary>
+          <div class="panel-body">
+            <label>Scanline strength <span class="range-control"><input id="scanlineStrength" type="range" min="0" max="1" step="0.01" value="0.5" /></span></label>
+            <label>Phosphor mask <span class="range-control"><input id="phosphorMask" type="range" min="0" max="1" step="0.01" value="0.5" /></span></label>
+            <label>Barrel distortion <span class="range-control"><input id="barrelDistortion" type="range" min="-0.8" max="0.8" step="0.01" value="0" /></span></label>
+            <label>Bloom <span class="range-control"><input id="bloom" type="range" min="0" max="1" step="0.01" value="0.5" /></span></label>
+            <label>Flicker <span class="range-control"><input id="flicker" type="range" min="0" max="1" step="0.01" value="0.22" /></span></label>
+            <label>Chromatic aberration <span class="range-control"><input id="chromaticAberration" type="range" min="0" max="1" step="0.01" value="0.5" /></span></label>
+            <label>Noise <span class="range-control"><input id="noise" type="range" min="0" max="1" step="0.01" value="0.5" /></span></label>
+            <label>Pixel size <span class="range-control"><input id="pixelSize" type="range" min="1" max="8" step="1" value="1" /></span></label>
+            <button id="resetParamsBtn" type="button">Reset parameters</button>
+          </div>
+        </details>
+
+        <details class="panel" open>
+          <summary>Preview</summary>
+          <div class="panel-body video-controls">
+            <label>Preview mode
+              <div id="previewMode" class="selection-box" role="radiogroup" aria-label="Preview mode">
+                <button type="button" data-value="still" data-selected="true">Still</button>
+                <button type="button" data-value="playback">Playback</button>
+              </div>
+            </label>
+            <div class="row">
+              <label>Preview FPS <input id="previewFps" type="number" value="15" min="1" max="60" /></label>
+              <label>Preview scale
+                <div id="previewScale" class="selection-box selection-inline" role="radiogroup" aria-label="Preview scale">
+                  <button type="button" data-value="1">100%</button>
+                  <button type="button" data-value="0.75">75%</button>
+                  <button type="button" data-value="0.5" data-selected="true">50%</button>
+                  <button type="button" data-value="0.33">33%</button>
+                </div>
+              </label>
+            </div>
+            <label>Preview quality
+              <div id="previewMaxPixels" class="selection-box selection-box-wrap" role="radiogroup" aria-label="Preview quality">
+                <button type="button" data-value="307200">Fast</button>
+                <button type="button" data-value="921600" data-selected="true">Balanced</button>
+                <button type="button" data-value="2073600">High</button>
+                <button type="button" data-value="0">Unlimited</button>
+              </div>
+            </label>
+            <label>Preview frame (s)
+              <span class="range-control"><input id="previewTime" type="range" min="0" max="0" step="0.01" value="0" disabled /></span>
+            </label>
+            <label>Source downsample
+              <div id="sourceScale" class="selection-box selection-inline" role="radiogroup" aria-label="Source downsample">
+                <button type="button" data-value="1" data-selected="true">100%</button>
+                <button type="button" data-value="0.75">75%</button>
+                <button type="button" data-value="0.5">50%</button>
+                <button type="button" data-value="0.33">33%</button>
+                <button type="button" data-value="0.25">25%</button>
+              </div>
+            </label>
+          </div>
+        </details>
+
+        <details class="panel" open>
+          <summary>Export</summary>
+          <div class="panel-body">
+            <div class="row">
+              <label>FPS <input id="fps" type="number" value="30" min="12" max="120" /></label>
+              <label>Duration (s) <input id="duration" type="number" value="4" min="1" max="20" step="0.5" /></label>
+            </div>
+            <label>Format
+              <div id="exportFormat" class="selection-box selection-inline" role="radiogroup" aria-label="Export format">
+                <button type="button" data-value="mp4" data-selected="true">MP4 (fast)</button>
+                <button type="button" data-value="webm">WebM</button>
+              </div>
+            </label>
+            <label>Quality multiplier <input id="exportQuality" type="number" min="0.5" max="2.5" step="0.1" value="1" /></label>
+            <label class="checkbox-row"><input id="includeOriginalAudio" type="checkbox" /> Include original audio (video sources)</label>
+            <p class="export-note">Audio passthrough uses realtime WebM export for best compatibility.</p>
+            <div class="actions">
+              <button id="exportBtn">Export</button>
+              <button id="cancelExportBtn" type="button" disabled>Cancel export</button>
+              <button id="resetSourceBtn" type="button">Reset source</button>
+            </div>
+          </div>
+        </details>
+
+        <div id="status" class="status">Load an image to begin.</div>
+        <progress id="progress" max="1" value="0"></progress>
+      </section>
+
+      <section class="preview">
+        <canvas id="previewCanvas" width="960" height="540"></canvas>
+      </section>
+    </main>
+
+    <script src="./src/app.js"></script>
+  </body>
+</html>
