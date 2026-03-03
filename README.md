@@ -65,3 +65,4 @@ You can animate CRT intensity over time (especially useful for still images):
 Notes:
 - If there are no keyframes, the current slider values are used for all frames.
 - `pixelSize` is interpolated and rounded to an integer per frame.
+- During live preview, slider changes are always shown immediately so you can dial in the next keyframe before saving it.

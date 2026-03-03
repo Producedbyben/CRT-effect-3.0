@@ -985,7 +985,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
     markPreviewDirty();
   }
 
-  function getAnimatedParamsAtTime(timeSeconds, durationSeconds, fallbackParams) {
+  function getAnimatedParamsAtTime(timeSeconds, durationSeconds, fallbackParams, { holdEdgeValues = true } = {}) {
     const baseParams = fallbackParams || readParams();
     if (!effectKeyframes.length) {
       return baseParams;
@@ -997,8 +997,8 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
     const first = effectKeyframes[0];
     const last = effectKeyframes[effectKeyframes.length - 1];
 
-    if (t <= first.time) return { ...first.params };
-    if (t >= last.time) return { ...last.params };
+    if (t <= first.time) return holdEdgeValues ? { ...first.params } : { ...baseParams };
+    if (t >= last.time) return holdEdgeValues ? { ...last.params } : { ...baseParams };
 
     for (let i = 0; i < effectKeyframes.length - 1; i++) {
       const left = effectKeyframes[i];
@@ -1195,7 +1195,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
         const previewSeconds = loadedSourceType === "video" && loadedVideo?.video && !stillMode
           ? previewFrameSeconds
           : frame / fps;
-        const animatedParams = getAnimatedParamsAtTime(previewSeconds, getExportDurationSeconds(), readParams());
+        const animatedParams = getAnimatedParamsAtTime(previewSeconds, getExportDurationSeconds(), readParams(), { holdEdgeValues: false });
         renderer.render(ctx, canvas.width, canvas.height, frame / fps, animatedParams, frame, fps);
       } else {
         previewBuffer.width = previewWidth;
@@ -1204,7 +1204,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
         const previewSeconds = loadedSourceType === "video" && loadedVideo?.video && !stillMode
           ? previewFrameSeconds
           : frame / fps;
-        const animatedParams = getAnimatedParamsAtTime(previewSeconds, getExportDurationSeconds(), readParams());
+        const animatedParams = getAnimatedParamsAtTime(previewSeconds, getExportDurationSeconds(), readParams(), { holdEdgeValues: false });
         renderer.render(previewCtx, previewBuffer.width, previewBuffer.height, frame / fps, animatedParams, frame, fps);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "black";
@@ -1359,7 +1359,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
           canvas,
           renderer,
           params: readParams(),
-          paramsResolver: (timeSeconds, durationSeconds) => getAnimatedParamsAtTime(timeSeconds, durationSeconds, readParams()),
+          paramsResolver: (timeSeconds, durationSeconds) => getAnimatedParamsAtTime(timeSeconds, durationSeconds, readParams(), { holdEdgeValues: true }),
           fps,
           duration,
           loadedSourceType,
@@ -1378,7 +1378,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
           canvas,
           renderer,
           params: readParams(),
-          paramsResolver: (timeSeconds, durationSeconds) => getAnimatedParamsAtTime(timeSeconds, durationSeconds, readParams()),
+          paramsResolver: (timeSeconds, durationSeconds) => getAnimatedParamsAtTime(timeSeconds, durationSeconds, readParams(), { holdEdgeValues: true }),
           fps,
           duration,
           beforeRenderFrame: loadedSourceType === "video" && loadedVideo
