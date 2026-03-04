@@ -1073,7 +1073,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
         const previewDuration = getExportDurationSeconds();
         const previewSeconds = loadedSourceType === "video" && loadedVideo?.video && !stillMode
           ? previewFrameSeconds
-          : frame / fps;
+          : getTimelineSecondsForFrame(frame, Math.max(1, Math.round(previewDuration * fps)), previewDuration, fps);
         const animatedParams = getAnimatedParamsAtTime(previewSeconds, previewDuration, readParams());
         renderer.render(ctx, canvas.width, canvas.height, frame / fps, animatedParams, frame, fps);
       } else {
@@ -1083,7 +1083,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
         const previewDuration = getExportDurationSeconds();
         const previewSeconds = loadedSourceType === "video" && loadedVideo?.video && !stillMode
           ? previewFrameSeconds
-          : frame / fps;
+          : getTimelineSecondsForFrame(frame, Math.max(1, Math.round(previewDuration * fps)), previewDuration, fps);
         const animatedParams = getAnimatedParamsAtTime(previewSeconds, previewDuration, readParams());
         renderer.render(previewCtx, previewBuffer.width, previewBuffer.height, frame / fps, animatedParams, frame, fps);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
