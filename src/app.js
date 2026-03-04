@@ -379,6 +379,14 @@ function getTargetBitrate(width, height, fps) {
   return Math.max(5_000_000, Math.min(35_000_000, estimated));
 }
 
+function getTimelineSecondsForFrame(frameIndex, totalFrames, duration, fps) {
+  if (totalFrames <= 1) return 0;
+  if (Number.isFinite(duration) && duration > 0) {
+    return (frameIndex / (totalFrames - 1)) * duration;
+  }
+  return frameIndex / Math.max(1, fps || 1);
+}
+
 async function exportMp4({ canvas, renderer, params, paramsResolver, fps, duration, beforeRenderFrame, onProgress, signal, bitrateScale = 1 }) {
   if (!("VideoEncoder" in window)) {
     throw new Error("WebCodecs VideoEncoder is unavailable in this browser/context.");
@@ -393,7 +401,7 @@ async function exportMp4({ canvas, renderer, params, paramsResolver, fps, durati
   throwIfAborted();
   const width = canvas.width;
   const height = canvas.height;
-  const totalFrames = Math.max(1, Math.floor(duration * fps));
+  const totalFrames = Math.max(1, Math.round(duration * fps));
   const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 
   const target = new ArrayBufferTarget();
@@ -442,7 +450,7 @@ async function exportMp4({ canvas, renderer, params, paramsResolver, fps, durati
       throw encoderFailure;
     }
 
-    const t = frame / fps;
+    const t = getTimelineSecondsForFrame(frame, totalFrames, duration, fps);
     if (beforeRenderFrame) await beforeRenderFrame(t, frame, fps);
     const frameParams = paramsResolver ? paramsResolver(t, duration) : params;
     renderer.render(ctx, width, height, t, frameParams, frame, fps);
@@ -488,7 +496,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
   const width = canvas.width;
   const height = canvas.height;
   const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
-  const totalFrames = Math.max(1, Math.floor(duration * fps));
+  const totalFrames = Math.max(1, Math.round(duration * fps));
 
   const stream = canvas.captureStream(fps);
   const sourceVideo = loadedSourceType === "video" ? loadedVideo?.video : null;
@@ -535,7 +543,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
       throw new DOMException("The operation was aborted.", "AbortError");
     }
 
-    const t = frame / fps;
+    const t = getTimelineSecondsForFrame(frame, totalFrames, duration, fps);
     if (sourceVideo) {
       await seekVideo(sourceVideo, t);
       renderer.setImage(sourceVideo, sourceScale());
@@ -1192,19 +1200,21 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
     if (shouldRender) {
       const { width: previewWidth, height: previewHeight } = getPreviewRenderSize();
       if (previewWidth === canvas.width && previewHeight === canvas.height) {
+        const previewDuration = getExportDurationSeconds();
         const previewSeconds = loadedSourceType === "video" && loadedVideo?.video && !stillMode
           ? previewFrameSeconds
-          : frame / fps;
-        const animatedParams = getAnimatedParamsAtTime(previewSeconds, getExportDurationSeconds(), readParams(), { holdEdgeValues: false });
+          : getTimelineSecondsForFrame(frame, Math.max(1, Math.round(previewDuration * fps)), previewDuration, fps);
+        const animatedParams = getAnimatedParamsAtTime(previewSeconds, previewDuration, readParams(), { holdEdgeValues: false });
         renderer.render(ctx, canvas.width, canvas.height, frame / fps, animatedParams, frame, fps);
       } else {
         previewBuffer.width = previewWidth;
         previewBuffer.height = previewHeight;
         const previewCtx = previewBuffer.getContext("2d", { alpha: false, desynchronized: true });
+        const previewDuration = getExportDurationSeconds();
         const previewSeconds = loadedSourceType === "video" && loadedVideo?.video && !stillMode
           ? previewFrameSeconds
-          : frame / fps;
-        const animatedParams = getAnimatedParamsAtTime(previewSeconds, getExportDurationSeconds(), readParams(), { holdEdgeValues: false });
+          : getTimelineSecondsForFrame(frame, Math.max(1, Math.round(previewDuration * fps)), previewDuration, fps);
+        const animatedParams = getAnimatedParamsAtTime(previewSeconds, previewDuration, readParams(), { holdEdgeValues: false });
         renderer.render(previewCtx, previewBuffer.width, previewBuffer.height, frame / fps, animatedParams, frame, fps);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "black";
@@ -1303,7 +1313,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
 
   addKeyframeBtn.addEventListener("click", () => {
     upsertKeyframe(keyframeTimeInput.value, readParams());
-    setStatus("Keyframe added.", "success");
+    setStatus(`Keyframe added at ${clampKeyframeTime(keyframeTimeInput.value).toFixed(2)}s.`, "success");
     progressEl.value = 0;
   });
 
@@ -1312,7 +1322,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
     const oldTime = selectedKeyframeTime;
     effectKeyframes = effectKeyframes.filter((entry) => Math.abs(entry.time - oldTime) >= 0.0005);
     upsertKeyframe(keyframeTimeInput.value, readParams());
-    setStatus("Keyframe updated from current sliders.", "success");
+    setStatus(`Keyframe updated to ${clampKeyframeTime(keyframeTimeInput.value).toFixed(2)}s.`, "success");
     progressEl.value = 0;
   });
 

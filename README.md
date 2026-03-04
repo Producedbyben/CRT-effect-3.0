@@ -66,3 +66,4 @@ Notes:
 - If there are no keyframes, the current slider values are used for all frames.
 - `pixelSize` is interpolated and rounded to an integer per frame.
 - During live preview, slider changes are always shown immediately so you can dial in the next keyframe before saving it.
+- Keyframe times are always interpreted as **seconds** on the export timeline (not frame numbers), and export timing now maps first frame to `0s` and last frame to the full duration exactly.
