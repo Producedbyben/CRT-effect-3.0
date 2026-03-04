@@ -379,14 +379,6 @@ function getTargetBitrate(width, height, fps) {
   return Math.max(5_000_000, Math.min(35_000_000, estimated));
 }
 
-function getTimelineSecondsForFrame(frameIndex, totalFrames, duration, fps) {
-  if (totalFrames <= 1) return 0;
-  if (Number.isFinite(duration) && duration > 0) {
-    return (frameIndex / (totalFrames - 1)) * duration;
-  }
-  return frameIndex / Math.max(1, fps || 1);
-}
-
 async function exportMp4({ canvas, renderer, params, paramsResolver, fps, duration, beforeRenderFrame, onProgress, signal, bitrateScale = 1 }) {
   if (!("VideoEncoder" in window)) {
     throw new Error("WebCodecs VideoEncoder is unavailable in this browser/context.");
@@ -401,7 +393,7 @@ async function exportMp4({ canvas, renderer, params, paramsResolver, fps, durati
   throwIfAborted();
   const width = canvas.width;
   const height = canvas.height;
-  const totalFrames = Math.max(1, Math.round(duration * fps));
+  const totalFrames = Math.max(1, Math.floor(duration * fps));
   const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 
   const target = new ArrayBufferTarget();
@@ -450,7 +442,7 @@ async function exportMp4({ canvas, renderer, params, paramsResolver, fps, durati
       throw encoderFailure;
     }
 
-    const t = getTimelineSecondsForFrame(frame, totalFrames, duration, fps);
+    const t = frame / fps;
     if (beforeRenderFrame) await beforeRenderFrame(t, frame, fps);
     const frameParams = paramsResolver ? paramsResolver(t, duration) : params;
     renderer.render(ctx, width, height, t, frameParams, frame, fps);
@@ -496,7 +488,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
   const width = canvas.width;
   const height = canvas.height;
   const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
-  const totalFrames = Math.max(1, Math.round(duration * fps));
+  const totalFrames = Math.max(1, Math.floor(duration * fps));
 
   const stream = canvas.captureStream(fps);
   const sourceVideo = loadedSourceType === "video" ? loadedVideo?.video : null;
@@ -543,7 +535,7 @@ async function exportWebmRealtime({ canvas, renderer, params, paramsResolver, fp
       throw new DOMException("The operation was aborted.", "AbortError");
     }
 
-    const t = getTimelineSecondsForFrame(frame, totalFrames, duration, fps);
+    const t = frame / fps;
     if (sourceVideo) {
       await seekVideo(sourceVideo, t);
       renderer.setImage(sourceVideo, sourceScale());
